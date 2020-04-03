@@ -1,0 +1,193 @@
+---
+title: "02.climat_analysis"
+author: "Guillaume Papuga"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include=FALSE, message=FALSE, warning=FALSE)
+```
+
+```{r packages}
+require(ade4)
+require(here)
+library(tidyverse)
+library(stringr)
+```
+
+```{r data loading}
+d.occ = read.csv(here::here("data","processed", "d.occ.txt"), sep = ";", dec = ".")
+
+
+```
+
+
+# Introduction
+Here I explain the demaarche
+
+# Multivariate space - niche space
+Work under progress : integrating and sorting code
+
+```{r}
+
+```
+
+
+#######
+# I. Climatic niche analysis
+#######
+# data
+bdd=read.csv("bdd.csv",header=T,row.names=1,sep=";",dec=",")
+
+###
+# 1. Altitude of sampled population
+###
+# run the script for broad habitat (II.1) with >i="altitude"
+
+###
+# 2. Climate niche analysis
+###
+
+## 2a. Telecharger les données worldclim (et autre)
+library(rgdal)
+library(raster)
+library(maps)
+library(mapdata)
+
+## Télécharger avec le système de Raster ESRI (présent sur l'ordi)
+# Définir la zone d'étude et en faire un objet "Spatial Polygon"
+zone.etude <-map("world", regions=c("Spain", "Andorra","Italy","France"), exact=TRUE,fill=T)  # défini le fond de carte en "objet map"; il faut que "fill = T" pour pouvoir convertir en spatialpolygon
+IDs <- sapply(strsplit(zone.etude$names, ":"), function(x) x[1]) # récupère les noms des pays
+zone.etudeSpp <- map2SpatialPolygons(zone.etude, IDs=IDs, proj4string=CRS("+proj=longlat +datum=WGS84"))  # convertit en "Spatial Polygon"
+e <- extent(zone.etudeSpp) # recuperer spatial extent du shapefile utilisé pour extraire les données
+
+setwd("~/Documents/Recherche/Ressources recherche/Données brutes/Bioclim/current") # défini le dossier ou sont stockés les raster bioclim
+
+# la boucle crée un rasterstack des variables bioclim déjà cropées au bon Extent
+for (i in 1:19) {
+  r<-raster(paste("bio_",i,sep="")) # télécharge le raster
+  r.crop=crop(r, e) # récupère uniquement l'extent défini (e) avec la fonction crop
+  r.mask=mask(r.crop,zone.etudeSpp) # masque les parties en dehors du spatial polygon (crée des NA à la place des valeurs)
+  assign(x=paste("r.crop_",i,sep=""),value=r.mask) # donne le bon nom
+}
+predictors=stack(r.crop_1,r.crop_2,r.crop_3,r.crop_4,r.crop_5,r.crop_6,r.crop_7,r.crop_8,r.crop_9,r.crop_10,r.crop_11,r.crop_12,r.crop_13,r.crop_14,r.crop_15,r.crop_16,r.crop_17,r.crop_18,r.crop_19) # joint les raster en un paquet
+setwd("~/Documents/Recherche/Projets & articles/en cours/article_Linum hybridation/Data")
+
+## 2b. Données de fond (background)
+## Extrait toutes les cellules d'un fond de carte données
+bg=as.data.frame(na.omit(extract(predictors,e),cellnumbers=F)) #background data, on récupère avec extract et l'extent (e) puis on enlève les NA qui sont en dehors de l'extent (cf mask du raster dans la boucle ci dessus)
+species=as.vector(rep("bg",nrow(bg)))
+bg=cbind(bg,species)
+
+## 2c. Extrait les valeurs pour les points de présence
+## utilise la fonction extract
+val.bioclim=extract(predictors,bdd[,15:14],cellnumbers=TRUE) # extrait pour tous en conservant le n° de cellule !! attention à bien mettre x > y, et pas latitude > longitude... !!
+val.bioclim=cbind(as.vector(bdd$nom_retenu),val.bioclim) # colle la liste des noms de chaque point avec "as.vector" pour avoir le vrai nom, et pas "1" et "2"
+val.bioclim=na.omit(val.bioclim) # enlève les NA si l'extent du sample de BG points est different de l'extent du raster...)
+colnames(val.bioclim)[1]="species"
+val.bioclim=as.data.frame(val.bioclim) # converti en dataframe pour pouvoir utiliser les $
+
+## enlève les doublons (même cellule) pour présence et absence
+# Pour Linum tenuifolium
+val.bioclim.tenui=val.bioclim[which(val.bioclim$species==as.vector(unique(val.bioclim$species)[2])),] # formulation complexe 'as.vector(unique(val.bioclim$species)[2])' permet de sortir le nom de l'espèce dans le bon format
+val.bioclim.tenui=unique(val.bioclim.tenui)
+
+# Pour Linum suffruticosum
+val.bioclim.suf=val.bioclim[which(val.bioclim$species==as.vector(unique(val.bioclim$species)[1])),]
+val.bioclim.suf=unique(val.bioclim.suf)
+
+# Réuni les deux sous-parties
+val.bioclim=rbind(val.bioclim.tenui,val.bioclim.suf)
+val.bioclim=val.bioclim[,-2] # et on enlève la colonne "cell"
+
+## 2d. Combiner vrais points et random.points
+# bg la matrice de "background points" et val.bioclim la matrice des données extraites
+mat.linum.pa=rbind(bg,val.bioclim) # rbind colle les lignes en alignant les colonnes tout seul
+
+# il faut transfomer les valeur de la matrice en 'numeric' car rbind les colle en tant que texte
+for (i in 1:19){
+  mat.linum.pa[,i]=as.numeric(mat.linum.pa[,i])
+  }
+
+## 2e. enlever la colinéarité dans le jeu de données
+# PCA globale
+pca.bg=dudi.pca(bg[,-(ncol(bg))]) # enlève la dernière colonne (species) pour la PCA
+s.corcircle(pca.bg$co,clabel = 0.6,grid=FALSE,box=F)
+
+# -> on garde les variables 1, 4, 5, 6, 12
+
+# Pairs (cf fonction panel.cor dans l'aide de pairs) sur les points des 2 espèces (est ce que le plan vectoriel est discriminant?)
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+  {
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+  }
+
+pairs(val.bioclim[,c("bio_1", "bio_4", "bio_5", "bio_6", "bio_12", "species")], lower.panel = panel.smooth, upper.panel = panel.cor)
+  
+# -> on garde les variables 1, 4, 5, 6, 12
+ 
+
+## 2f. Convex hull and niche volume
+# crée la matrice PCA
+pca.tot=dudi.pca(mat.linum.pa[,c(1,4,5,6,12)],nf=2)
+# s.class(pca.tot$li,mat.linum.pa$species) # s.class a refaire
+s.corcircle(pca.tot$co,grid=F)
+mat.pca=cbind(mat.linum.pa$species,pca.tot$li[,1:2])
+colnames(mat.pca)[1]="species"
+
+# Carte de distrib des points
+zone.etude <-map("world", regions=c("Spain", "Andorra","Italy","France"), exact=TRUE,fill=F)  # défini le fond de carte en "objet map"
+points(bdd[which(bdd$nom_retenu=="Linum tenuifolium L., 1753"),"longitude"],bdd[which(bdd$nom_retenu=="Linum tenuifolium L., 1753"),"latitude"],col="blue",pch=20,cex=0.1)
+points(bdd[which(bdd$nom_retenu=="Linum suffruticosum subsp. appressum (Caball.) Rivas Mart., 1978"),"longitude"],bdd[which(bdd$nom_retenu=="Linum suffruticosum subsp. appressum (Caball.) Rivas Mart., 1978"),"latitude"],col="red",pch=20,cex=0.1)
+
+# Plot et chull
+# En premier lieu, on fait trois matrices (bg, tenui, suffru) pour diminuer la longueur du code...
+
+mat.bg=as.data.frame(cbind(mat.pca[which(mat.pca$species=="bg"),2],mat.pca[which(mat.pca$species=="bg"),3]))
+colnames(mat.bg)[1]="x"
+colnames(mat.bg)[2]="y"
+
+mat.tenui=as.data.frame(cbind(mat.pca[which(mat.pca$species=="Linum tenuifolium L., 1753"),2],mat.pca[which(mat.pca$species=="Linum tenuifolium L., 1753"),3]))
+colnames(mat.tenui)[1]="x"
+colnames(mat.tenui)[2]="y"
+
+mat.suf=as.data.frame(cbind(mat.pca[which(mat.pca$species=="Linum suffruticosum subsp. appressum (Caball.) Rivas Mart., 1978"),2],mat.pca[which(mat.pca$species=="Linum suffruticosum subsp. appressum (Caball.) Rivas Mart., 1978"),3]))
+colnames(mat.suf)[1]="x"
+colnames(mat.suf)[2]="y"
+
+# Maintenant on trace le plot avec tous les points + convex hull
+plot(mat.bg$x,mat.bg$y,col="grey",pch=20,cex=0.05) # background points en gris tout petit
+
+points(mat.tenui$x,mat.tenui$y,col="blue",pch=20,cex=0.1) # Linum tenuifolium en bleu
+sommet.tenui=chull(mat.tenui$x,mat.tenui$y) # choisit les sommet du convex hull   !! c'est le n° de ligne qui est donné !!
+sommet.tenui=c(sommet.tenui,sommet.tenui[1]) # répète le 1er point pour boucler le polygone
+lines(mat.tenui[sommet.tenui, ],col="blue") # on utilise "lines" pour tracer une ligne entre les points de mat.tenui qui sont présent dans la liste sommet.tenui
+
+
+points(mat.suf$x,mat.suf$y,col="red",pch=20,cex=0.1) # Linum suffruticosum en rouge
+sommet.suf=chull(mat.suf$x,mat.suf$y) # choisit les sommet du convex hull   !! c'est le n° de ligne qui est donné !!
+sommet.suf=c(sommet.suf,sommet.suf[1]) # répète le 1er point pour boucler le polygone
+lines(mat.suf[sommet.suf, ],col="red") # on utilise "lines" pour tracer une ligne entre les points de mat.tenui qui sont présent dans la liste sommet.tenui
+
+# On trace un 2nd plot simplifié avec convex hull + barycentres
+plot(mat.bg$x,mat.bg$y,col="grey",pch=20,cex=0.05) # background points en gris tout petit
+lines(mat.tenui[sommet.tenui, ],col="blue") # on reprend le convex hull du dessus
+lines(mat.suf[sommet.suf, ],col="red") # idem
+
+points (mean(mat.tenui$x),mean(mat.tenui$y),col="blue",pch=20,cex=1.5)
+points (mean(mat.suf$x),mean(mat.suf$y),col="red",pch=20,cex=1.5)
+
+
+## 2g. Analyse discriminante
+
+
+
+
+

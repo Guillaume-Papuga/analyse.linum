@@ -1,0 +1,367 @@
+---
+title: "01.habitat_analysis"
+author: "Guillaume Papuga"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r packages}
+require(ade4)
+require(here)
+library(tidyverse)
+library(stringr)
+```
+
+```{r data loading}
+d.hab = read.csv(here::here("data","processed", "d.hab.txt"), sep = ";", dec = ".")
+```
+
+# Introduction
+Here I explain the structure of the section.
+
+# Analysis 1
+Work under progress : integrating and sorting code
+```{r}
+# draw the plot
+plot(tall_shrbs ~ trees, col = "blue", data = d.hab)
+
+# save the plot 
+jpeg(here::here("outputs", "figures", "plot.test.jpeg"), 
+     width = 15, height =12, units="cm", quality=75, res=300)
+plot(tall_shrbs ~ trees, col = "blue", data = d.hab)
+dev.off()
+
+
+
+```
+
+
+#######
+# II. Broad habitat and soil
+#######
+
+###
+# 1. Trait by trait analysis
+###
+
+var = var.soil
+data.linum = data.linum.soil
+
+for (i in var){
+  
+  # définit la zone d'impression
+  pdf(file = paste("graph_",i,".pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
+  zones = matrix(c(1,1,2,3,4,5,6,6),ncol=2,nrow=4,byrow=TRUE) # définir la fenetre graphique
+  layout(zones,widths=c(1,1),heights=c(2,2,2,2)) # définir la hauteur et la largeur des cases
+  par(mar = c(4,4,1,4)) # marges
+  
+  # graphique n°1 : historgramme global des valeurs
+  hist(data.linum[which(data.linum$species=="Linum suffruticosum"),i],col="brown1",main=i,xlab="Value",breaks=10) # histogramme en 10 barres
+  hist(data.linum[which(data.linum$species=="Linum tenuifolium"),i],col="cornflowerblue",main=i,add=T,breaks=10) # idem
+  mean.suf=mean(na.omit(data.linum[which(data.linum$species=="Linum suffruticosum"),i])) # enlève les NA
+  mean.ten=mean(na.omit(data.linum[which(data.linum$species=="Linum tenuifolium"),i])) # idem
+  abline(v=mean.suf, col="red") # représente la moyenne comme une barre verticale
+  abline(v=mean.ten, col="blue")
+  
+  # graphique n°2 : barplot des moyennes par espèce
+  moy.par.sp=aggregate(data.linum[,i]~data.linum$species,FUN=function (x) (mean(x)))  # moyenne par espèce
+  erstd.par.sp=aggregate(data.linum[,i]~data.linum$species,FUN=function(x) (sd(x))/(length(x))^(1/2))  # erreur standard
+  barplot.sp=barplot(moy.par.sp[,2], main=i,  ylab="Value",ylim=c(0,(max(moy.par.sp[,2]))*1.3),axes=T)
+  error.bar(barplot.sp,moy.par.sp[,2],erstd.par.sp[,2])
+  mtext(c("L. suf","L. tenui"),side=1,line=0.5,adj=c(0.2,0.8))
+  
+  # graphique n°3 : boxplot des espèces
+  boxplot(data.linum[,i]~data.linum$species,main=i) # dessine un boxplot, info proche n°2
+  
+  # graphique n°4 : barplot des moyennes par espèce par status (mixed VS pure)
+  moy.par.sp.st=aggregate(data.linum[,i]~data.linum$species*data.linum$status,FUN=function (x) (mean(x)))  # moyenne croisée espèce*status
+  moy.par.sp.st=moy.par.sp.st[c(3,1,4,2),] # réarrange l'ordre pour avoir les barres dans le bon ordre
+  erstd.par.sp.st=aggregate(data.linum[,i]~data.linum$species*data.linum$status,FUN=function(x) (sd(x))/(length(x))^(1/2))  
+  erstd.par.sp.st=erstd.par.sp.st[c(3,1,4,2),] # idem pour erreur standard
+  barplot.sp=barplot(moy.par.sp.st[,3], main=i,  ylab="Value",ylim=c(0,(max(moy.par.sp.st[,3]))*1.3),axes=T,space=c(0,0.1,1,0.1))
+  error.bar(barplot.sp,moy.par.sp.st[,3],erstd.par.sp.st[,3])
+  mtext(c("Pure","Mixed","Pure","Mixed"),side=1,line=0.5,adj=c(0.1,0.3,0.7,0.9))
+  mtext(c("L. suffruticosum","L. tenuifolium"),side=1,line=2,adj=c(0.15,0.87))
+  
+  # graphique n°5 : comparaison des populations mixtes
+  suf.mix = merge (data.linum[which(data.linum$status=="mixed" & data.linum$species=="Linum suffruticosum"),], 
+                   tab.mixed.duo,
+                   by.x = "row.names", by.y = "Linum suffruticosum",
+                   all = F)
+  suf.mix = suf.mix [order(suf.mix[,"order"]),]
+  
+  ten.mix = merge (data.linum[which(data.linum$status=="mixed" & data.linum$species=="Linum tenuifolium"),], 
+                   tab.mixed.duo,
+                   by.x = "row.names", by.y = "Linum tenuifolium",
+                   all = F)
+  ten.mix = ten.mix [order(ten.mix[,"order"]),]
+  suf.mix
+  plot(suf.mix[,i], ten.mix[,i],
+       xlim=c(min(c(suf.mix[,i], ten.mix[,i])*0.95), max(c(suf.mix[,i], ten.mix[,i]))*1.05),
+       ylim=c(min(c(suf.mix[,i], ten.mix[,i]))*0.95,max(c(suf.mix[,i], ten.mix[,i]))*1.05),
+       ylab="Linum tenuifolium",xlab="Linum suffruticosum",main="Mixed populations",
+       cex=1,pch=20)
+  abline(a=0,b=1) #bissectrice
+  
+  
+  ### Stats
+  matrice.stat=data.linum[,c("species",i)]
+  matrice.stat=na.omit(matrice.stat)
+  
+  # Normalité des distribution (# teste la normalité de la distribution de chaque jeu de données)
+  shpt.suf=shapiro.test(matrice.stat[which(matrice.stat$species=="Linum suffruticosum"),i]) 
+  shpt.ten=shapiro.test(matrice.stat[which(matrice.stat$species=="Linum tenuifolium"),i])
+  
+  # Test d'homogénéité des variances
+  hom.var=var.test(matrice.stat[,i]~matrice.stat$species)
+
+  # Test t (alternative = two.sided)
+  ttest=t.test(matrice.stat[,i]~matrice.stat$species,alternative="two.sided")
+
+  # Test de Wilcoxon pour données non-normales [alternative two.sided]
+  wilc=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="two.sided")
+  
+  # Test de Wilcoxon pour données non-normales [alternative greater]
+  wilc.g=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="greater")
+  
+  # Test de Wilcoxon pour données non-normales [alternative less]
+  wilc.l=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="less")
+  
+  # Test apparié (sur jeu de données réduit)
+  paired.wilc=wilcox.test(suf.mix[,i], ten.mix[,i], paired=T) # prendre test non apparié
+
+  # Affiche les résultats dans la dernière fenêtre
+  plot.new() # crée une fenêtre de plot vide où ecrire les résultats pour les avoir dans le plot
+  
+  text(0,0.95,paste("Normality L. suffruticosum, p = ",round(shpt.suf$p.value,4)),cex=1.6,adj = c(0, NA))
+  text(0.55,0.95,paste("Normality L. tenuifolium, p = ",round(shpt.ten$p.value,4)),cex=1.6,,adj = c(0, NA))
+  
+  text(0,0.7,"Homogeneity of variance",cex=1.6,adj = c(0, NA))
+  text(0.05,0.6,paste("Statistic =", round(hom.var$statistic,3),"p.value = ",round(hom.var$p.value,3)),cex=1.6,adj = c(0, NA))
+       
+  text(0.55,0.7,"Student t test",cex=1.6,adj = c(0, NA))
+  text(0.6,0.6,paste("Statistic =", round(ttest$statistic,3),"p.value = ",round(ttest$p.value,3)),cex=1.6,adj = c(0, NA))
+  
+  text(0,0.4,"Wilcoxon test two.sided",cex=1.6,adj = c(0, NA))
+  text(0.05,0.3,paste("Statistic =", round(paired.wilc$statistic,3),"p.value = ",round(wilc$p.value,3)),cex=1.6,adj = c(0, NA))
+  
+  text(0.55,0.4,"Non parametric paired test",cex=1.6,adj = c(0, NA))
+  text(0.6,0.3,paste("Statistic =", round(hom.var$statistic,3),"p.value = ",round(hom.var$p.value,3)),cex=1.6,adj = c(0, NA))
+
+  text(0,0.1,"Wilcoxon test greater",cex=1.6,adj = c(0, NA))
+  text(0.05,0,paste("Statistic =", round(wilc.g$statistic,3),"p.value = ",round(wilc.g$p.value,3)),cex=1.6,adj = c(0, NA))
+  
+  text(0.55,0.1,"Wilcoxon test less",cex=1.6,adj = c(0, NA))
+  text(0.6,0,paste("Statistic =", round(wilc.l$statistic,3),"p.value = ",round(wilc.l$p.value,3)),cex=1.6,adj = c(0, NA))
+  
+       par(mfrow=c(1,1)) # ferme la fenetre
+       dev.off() #arrête PDF     
+}
+
+
+###
+# 2. Multivariate approach PCA
+###
+var = var.soil # adapte le code à la var
+data.linum = data.linum.soil # adapte le code a la var
+
+# 2a. Pairs table to investigate multi-collinearity
+# first, créer la fonction panel.cor dans l'aide de pairs
+mat.pairs = na.omit(data.linum[,c("species", var)]) # avec var.bhab pour le deuxième
+pairs(mat.pairs, lower.panel = panel.smooth, upper.panel = panel.cor,pch=16,cex=1)
+
+# 2b. PCA 
+matrice.pca = data.linum[,c("species",var)]  # choisi var.soil ou var.bhab
+matrice.pca = na.omit(matrice.pca)
+pca.linum = dudi.pca(matrice.pca[,var], scannf = FALSE, nf = 2)
+
+# définit la zone d'impression
+pdf(file = paste("PCA_bhab.pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
+zones = matrix(c(1,2,3),ncol=1,nrow=3,byrow=TRUE) # définir la fenetre graphique
+layout(zones,widths=c(1),heights=c(1,1,1)) # définir la hauteur et la largeur des cases
+par(mar = c(4,4,1,4)) # marges
+
+# les trois graphs
+s.corcircle(pca.linum$co,clabel=0.9,grid=F,box=F)
+s.label(pca.linum$li,clabel=0.9,grid=F,box=F)
+w.ax1=round((pca.linum$eig[1]/sum(pca.linum$eig))*100,1)
+text(3,1.5,paste("Axe 1 : ",w.ax1),adj=0)
+w.ax2=round((pca.linum$eig[2]/sum(pca.linum$eig))*100,1)
+text(3,2,paste("Axe 2 : ",w.ax2),adj=0)
+s.class(pca.linum$li,fac=as.factor(matrice.pca$species),clabel=0.9,grid=F)
+
+par(mfrow=c(1,1)) # ferme la fenetre
+dev.off() #arrête PDF 
+
+
+# 2c. with only "non correlated variables" variables > UNIQUEMENT POUR SOIL! Pas de correlation chez Bhab
+var.red = c("mg", "k", "cond", "mo" , "ph", "cn", "arcilla",  "limo") # selectionne pour soil
+# enlevé : "n", "p" (MO), "ca" (K), "arena" (Arcilla)
+matrice.pca = data.linum[,c("species", var.red)]
+matrice.pca = na.omit(matrice.pca)
+pca.linum = dudi.pca(matrice.pca[,var.red], scannf = FALSE, nf = 2)
+
+# définit la zone d'impression
+pdf(file = paste("PCA_soil.red.comp",".pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
+zones=matrix(c(1,2,3),ncol=1,nrow=3,byrow=TRUE) # définir la fenetre graphique
+layout(zones,widths=c(1),heights=c(1,1,1)) # définir la hauteur et la largeur des cases
+par(mar = c(4,4,1,4)) # marges
+
+# les trois graphs
+s.corcircle(pca.linum$co,clabel=0.9,grid=F,box=F)
+s.label(pca.linum$li,clabel=0.9,grid=F,box=F)
+w.ax1=round((pca.linum$eig[1]/sum(pca.linum$eig))*100,1)
+text(5,1.5,paste("Axe 1 : ",w.ax1))
+w.ax2=round((pca.linum$eig[2]/sum(pca.linum$eig))*100,1)
+text(5,2,paste("Axe 2 : ",w.ax2))
+s.class(pca.linum$li,fac=as.factor(matrice.pca$species),clabel=0.9,grid=F)
+
+par(mfrow=c(1,1)) # ferme la fenetre
+dev.off() #arrête PDF
+
+###
+# 3. Test differences : is there a difference between groups?
+###
+library (vegan)
+var = var.bhab # adapte le code à la var
+data.linum = data.linum.bhab # adapte le code a la var
+
+# 3a. NP MANOVA [permutational non parametric ANOVA] : Adonis2 (more robust in most case)
+adonis2(data.linum[,var] ~ species, data = data.linum, 
+        permutations = 999, method = "Bray")
+
+adonis2(data.linum[,var] ~ species, data = data.linum, 
+        permutations = 999, method = "euclidean")
+
+adonis2(data.linum[,var] ~ species, data = data.linum, 
+        permutations = 999, method = "mahalanobis")
+
+
+# 3b. MRPP [multi response permutation procedure]
+linum.mrpp = with(data.linum, mrpp(data.linum[,var], species)) # euclidean dissimilarity index
+linum.mrpp
+
+
+###
+# 4. Analyse discriminante 
+###
+
+### A. Linéaire (LDA)
+
+# packages
+library(adegraphics)
+library(MASS)
+
+# data
+data.linum = data.linum.bhab
+var = var.bhab
+
+# crée la matrice
+matrice.lda = data.linum[,var]
+factor.da = data.linum[,"species"]
+matrice.lda = na.omit(matrice.lda)
+
+# testing the normality of variance-covariance matrix
+library (MVN)
+suf = data.linum[which(data.linum$species == "Linum suffruticosum"), var] # suffruticosum
+ten = data.linum[which(data.linum$species == "Linum tenuifolium"), var] # tenuifolium
+
+res.mardia.suf = mvn(data = suf, mvnTest = "mardia")
+result$multivariateNormality
+
+result = mvn(data = data.linum[,c("species",var)], subset = "species", mvnTest = "mardia",
+             univariateTest = "AD", univariatePlot = "histogram",
+             multivariatePlot = "qq", multivariateOutlierMethod = "adj",
+             showOutliers = TRUE, showNewData = TRUE)
+result$multivariateNormality
+
+# testing the homogeneity of variance-covariance matrix
+library (heplots)
+res <- boxM(matrice.lda, factor.da)
+
+dets <- res$logDet
+ng <- length(res$logDet)-1
+points(dets , 1:3,  
+       cex=c(rep(1.5, ng), 2.5), 
+       pch=c(rep(16, ng), 15),
+       col= c(rep("blue", ng), "red"))
+
+# selectionne les variables sur la base de la PCA d'avant
+linum.lda = lda(factor.da~., data = matrice.lda, prior = c(1, 1)/2, CV = TRUE)
+
+# Assess the accuracy of the prediction
+# percent correct for each category of G
+ct <- table(factor.da, linum.lda$class) # contingency table
+
+diag(prop.table(ct, 1)) # proportion on the contingency table (diag prend juste la diag = les justes)
+sum(diag(prop.table(ct))) # total des prédictions justes
+
+
+### B. Quadratic (discriminant function does not assume homogeneity of variance-covariance matrices)
+
+linum.qda = qda(factor.da~., data = matrice.lda, prior = c(1, 1)/2, CV = TRUE)
+plot (linum.qda)
+
+# Assess the accuracy of the prediction
+# percent correct for each category of G
+ct <- table(factor.da, linum.qda$class) # contingency table
+
+diag(prop.table(ct, 1)) # proportion on the contingency table (diag prend juste la diag = les justes)
+sum(diag(prop.table(ct))) # total des prédictions justes
+
+### C. graphs
+plot (linum.lda)
+plot (linum.lda, dimen=1, type="both") 
+
+# Exploratory Graph for LDA or QDA
+library(klaR)
+part.plot = partimat(factor.da~., data = matrice.lda, method="lda") 
+
+# graph pairs
+pairs(matrice.lda, main = "Pair plots", pch=22,
+      bg=c("red", "blue")[unclass(factor.da)]) 
+
+###
+# 5. PLS DA
+###
+
+
+
+###
+# 6. Structure spatiale
+###
+################################## Vieux code à reprendre ###########################@
+# 2d. Structure spatiale des données
+mat.spa.str=merge(data.linum,pca.linum$li,by="row.names",all=T)
+data(wrld_simpl) # plot carte globale
+plot(wrld_simpl, xlim=c(0,10), ylim=c(42,47), axes=TRUE, col='light yellow') # cadre sur Med ouest
+data.linum.suf=na.omit(mat.spa.str[which(mat.spa.str$species=="Linum suffruticosum"),c("longitude","latitude","Axis1","Axis2")]) # selectionne données L. suf pour en tirer les coordonnées GPS (avec les valeurs axis 1 et 2 pour la taille des points)
+data.linum.ten=na.omit(mat.spa.str[which(mat.spa.str$species=="Linum tenuifolium"),c("longitude","latitude","Axis1","Axis2")]) # idem
+points(data.linum.suf$longitude,data.linum.suf$latitude,pch=16,cex=(data.linum.suf$Axis1 - (min(data.linum.suf)) +1)/6,col="red")  # la taille des points est basée sur 'val Axis1' + minimum Axis 1 + 1, pour etre sur d'avoir des valeur positives dans le CEX
+points(data.linum.ten$longitude,data.linum.ten$latitude,pch=16,cex=(data.linum.ten$Axis1 - (min(data.linum.ten)) +1)/6,col="blue")
+
+points(data.linum.suf$longitude,data.linum.suf$latitude,pch=16,cex=((data.linum.suf$Axis1)+5)/5,col="red")
+points(data.linum.ten$longitude,data.linum.ten$latitude,pch=16,cex=((data.linum.ten$Axis1)+5)/5,col="blue")
+
+# autocorrelation spatiale
+head(data.linum[,var.soil])
+dist.dudi(na.omit(data.linum[,var.soil]))
+dist.dudi(pca.linum)
+
+
+
+
+# 3c. Mantel test
+lsuf.dist <- vegdist(data.linum[which(data.linum$species == "Linum suffruticosum"), var]) # Bray-Curtis
+lten.dist <- vegdist(data.linum[which(data.linum$species == "Linum tenuifolium"), var]) # Bray-Curtis
+mantel(lsuf.dist, lten.dist)
+mantel(veg.dist, env.dist, method="spear")
+
+
+
+
+

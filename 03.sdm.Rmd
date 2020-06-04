@@ -25,7 +25,10 @@ d.occ = read.csv(here::here("data","processed", "d.occ.txt"), sep = ";", dec = "
 
 
 
+## Generalized linear model
 
+
+## Generalized additive model
 
 
 

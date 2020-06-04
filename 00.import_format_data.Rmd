@@ -4,10 +4,6 @@ author: "Guillaume Papuga"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-test
-
-re test
-
 
 ```{r setup, include=FALSE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE, include=FALSE, message=FALSE, warning=FALSE)
@@ -159,6 +155,7 @@ d.occ = unique (d.occ)
 # write data in the "processed" folder
 write.table (x = d.occ, here::here("data","processed","d.occ.txt"), sep = ";", dec = ".")
 ```
+
 
 
 

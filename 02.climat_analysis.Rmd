@@ -26,6 +26,7 @@ d.occ = read.csv(here::here("data","processed", "d.occ.txt"), sep = ";", dec = "
 # Introduction
 Here I explain the demaarche
 
+
 # Multivariate space - niche space
 Work under progress : integrating and sorting code
 

@@ -14,158 +14,504 @@ require(ade4)
 require(here)
 library(tidyverse)
 library(stringr)
+library(reshape2)
+library(ggpubr)
+library(statisticalModeling)
+library(corrplot)
 ```
 
 ```{r data loading}
+# raw table
 d.hab = read.csv(here::here("data","processed", "d.hab.txt"), sep = ";", dec = ".")
+d.soil = read.csv(here::here("data","processed", "d.soil.txt"), sep = ";", dec = ".")
+
+# merged table
+d.niche = inner_join(d.hab, d.soil, # inner_join elimine =-15 pops
+                     by = c("code.pop", "species", "status"))
+d.niche = d.niche %>%
+  mutate (shrub = small_shrbs + tall_shrbs)
 ```
 
 # Introduction
 Here I explain the structure of the section.
 
-# Analysis 1
-Work under progress : integrating and sorting code
+# 1. Trait by trait analysis
+```{r format plot without display}
+# This first chunk aims at producing all the different plots
+# through a for loop, without displaying anything
+# Specific chuncks are used to format the document
+
+# Defining tables & varaibles
+var = colnames (d.niche) [c(7:14, 16, 18:31)]
+d.niche.l = melt(d.niche [, c("code.pop", "species", "status", var)], 
+                 id.vars = c("code.pop", "species", "status"))
+
+# Main loop to draw all the graphs
+for (i in var) {
+  # prepare the table
+  tab = d.niche.l %>%
+    filter(variable == i)
+  
+  # mean
+  m_sp = tab %>%
+    group_by(species) %>%
+    summarise(grp.mean = mean(value, na.rm = T))
+  
+  ## Graphique n°1 : historgramme global des valeurs
+  # plot
+  assign(paste0("hist.plot_", i),
+  ggplot(data = tab, aes(x= value, color=species, fill=species)) +
+    geom_histogram(aes(y=..density..), position="identity", alpha=0.5)+
+    geom_density(alpha=0.6) +
+    geom_vline(data = m_sp, aes(xintercept = grp.mean, color=species), linetype="dashed") +
+    scale_color_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    labs(title="Trait per species histogram plot", x = (i), y = "Density")+
+    theme_classic())
+
+  ## Graphique n°2 : barplot des moyennes par espèce
+  # plot
+  assign(paste0("vio.plot_", i),
+  ggplot(data = tab, aes(x =  species, y = value, fill = species)) +
+    geom_violin() +
+    labs(title="Trait per species plot", y = i)+
+    scale_color_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    geom_boxplot(width=0.05) +
+    stat_compare_means(method = "t.test") + # add p.value from a simple t.test
+    theme_classic())
+  
+  ## Graphique 3 : barplot des moyennes par espèce par status (mixed VS pure)
+  # plot
+  assign(paste0("box.plot_", i),
+  ggplot(data = tab, aes(x =  species, y = value, fill = status)) +
+    geom_boxplot() +
+    labs(title="Trait per species*status plot", y = i)+
+    scale_color_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))+
+    stat_compare_means(aes(label = paste0("p = ", ..p.format..))) + # add p.value from a simple t.test
+    theme_classic())
+}
+```
+
+The dataset is composed of `length(var)` variables : 
+`print (var)`
+
+## "annual_herbs" 
 ```{r}
-# draw the plot
-plot(tall_shrbs ~ trees, col = "blue", data = d.hab)
+hist.plot_annual_herbs
+vio.plot_annual_herbs
+```
+There is no difference in the coverage of annual herbs, which is always very low (<1%)
 
-# save the plot 
-jpeg(here::here("outputs", "figures", "plot.test.jpeg"), 
-     width = 15, height =12, units="cm", quality=75, res=300)
-plot(tall_shrbs ~ trees, col = "blue", data = d.hab)
-dev.off()
+```{r}
+box.plot_annual_herbs
+```
+No differences.
+
+## "perennial_herbs" 
+```{r}
+hist.plot_perennial_herbs
+vio.plot_perennial_herbs
+```
+Perennial herbs show important cover ~50%, but with a large dispersion.
+
+```{r}
+box.plot_perennial_herbs
+```
+No difference. 
+
+## "tot_herbs"
+```{r}
+hist.plot_tot_herbs
+vio.plot_tot_herbs
+```
+
+Very similar to the perennial herbs plot.
+
+```{r}
+box.plot_tot_herbs
+```
+
+## "small_shrbs"  
+```{r}
+hist.plot_small_shrbs
+vio.plot_small_shrbs
+```
+Very close values just below 20%. 
+
+```{r}
+box.plot_small_shrbs
+```
+No difference.
+
+## "tall_shrbs"    
+```{r}
+hist.plot_tall_shrbs
+vio.plot_tall_shrbs
+```
+Tall shrubs show similar cover. 
+```{r}
+box.plot_tall_shrbs
+```
+
+## "shrub"  
+```{r}
+hist.plot_shrub
+vio.plot_shrub
+```
+
+```{r}
+box.plot_shrub
+```
+
+## "trees"       
+```{r}
+hist.plot_trees
+vio.plot_trees
+```
+The habitat isn't covered by trees that reach a ~20% cover (typical garrigue)
+```{r}
+box.plot_trees
+```
+
+## "bare_soil"   
+```{r}
+hist.plot_bare_soil
+vio.plot_bare_soil
+```
+No difference regarding the extent of bare soil. 
+
+```{r}
+box.plot_bare_soil
+```
+
+## "mineral"  
+```{r}
+hist.plot_mineral
+vio.plot_mineral
+```
+No difference regarding the amount of mineral. It could have been expected that L. suffruticosum occur where mineral shows more important vale, but it is insignificant compared to the global dataset.
+```{r}
+box.plot_mineral
+```
+
+## "nb_ind_class" 
+This is not a variable, it's a control for pop size.
+```{r}
+hist.plot_nb_ind_class
+vio.plot_nb_ind_class
+```
+The usual population size was equivalent but some L. suffruticosum were extremely large, which we never found for the other species. 
+
+```{r}
+box.plot_nb_ind_class
+```
+
+## "area_med" 
+Same as above
+```{r}
+hist.plot_area_med
+vio.plot_area_med
+```
+Similarly, most population covered <5000m2. 
+
+```{r}
+box.plot_area_med
+```
+
+## "ca"    
+```{r}
+hist.plot_ca
+vio.plot_ca
+```
+The amount of CA (calcareous particles) is very much the same for both species.
+
+```{r}
+box.plot_ca
+```
+
+## "mg"  
+```{r}
+hist.plot_mg
+vio.plot_mg
+```
+No differences between taxa, skewed toward lower values. 
+
+```{r}
+box.plot_mg
+```
+
+## "k"   
+```{r}
+hist.plot_k
+vio.plot_k
+```
+No differences btw taxa. 
+
+```{r}
+box.plot_k
+```
+
+## "cond"  
+```{r}
+hist.plot_cond
+vio.plot_cond
+```
+Conductivity is very similar. 
+
+```{r}
+box.plot_cond
+```
+
+## "p"   
+```{r}
+hist.plot_p
+vio.plot_p
+```
+Nearly similar. 
+
+```{r}
+box.plot_p
+```
+
+## "mo"   
+```{r}
+hist.plot_mo
+vio.plot_mo
+```
+Similar content of organic matter.
+
+```{r}
+box.plot_mo
+```
+
+## "n"   
+```{r}
+hist.plot_n
+vio.plot_n
+```
+Similar levels of nitrogen (n)
+```{r}
+box.plot_n
+```
+
+## "ph"  
+```{r}
+hist.plot_ph
+vio.plot_ph
+```
+Very similar basic pH with some exception in L. suffruticosum (outliers).
+
+```{r}
+box.plot_ph
+```
+
+## "cn"    
+```{r}
+hist.plot_cn
+vio.plot_cn
+```
+Low Carbon/nitrogen ratio of ~11. 
+
+```{r}
+box.plot_cn
+```
+
+## "arcilla" 
+```{r}
+hist.plot_arcilla
+vio.plot_arcilla
+```
+No difference in arcilla
+```{r}
+box.plot_arcilla
+```
+
+## "arena"  
+```{r}
+hist.plot_arena
+vio.plot_arena
+```
+
+```{r}
+box.plot_arena
+```
+
+## "limo"  
+```{r}
+hist.plot_limo
+```
+
+```{r}
+vio.plot_limo
+```
+
+```{r}
+box.plot_limo
+```
+
+## Conclusion
+There is no difference in soil nor habitat characteristics among the two taxa. Their niche is so highly similar it sometime makes me doubt about how random this can be...
+
+ 
+# 2. Multivariate approach
+## Correlation structure among variables
+### a. PCA
+We decompose the analysis between soil & habitat variables. 
+
+```{r}
+# Define the variables
+var.hab = var[c(1:8, 23)]
+var.soil = var[11:22]
+
+# Run a PCA for habitat
+mat.pca.hab = d.niche %>%
+  select(species, var.hab)
+mat.pca.hab[is.na(mat.pca.hab)] = 0
+pca.hab = dudi.pca (mat.pca.hab[,-1], 
+                    scannf = F, nf = 2)
+s.corcircle(pca.hab$co)
+
+# Save the plot
+pdf(file = here::here("outputs", "figures", "corcircle.hab.pdf")) # open
+s.corcircle(pca.hab$co) # the plot
+dev.off() # close
+```
+This first correlation plot gives insights on the correlation structure of the dataset : 
+- perennial herb and total herbs are correlated >> total herbs
+- mineral is anticorrelated with the two first >> delete
+- small shrubs, tall shrubs and shrub >> keep shrub
+- conserve bare soil over mineral
+- maybe keep also tree (low correlation, but ecologicaly significant)
+
+```{r}
+# Run a PCA for soil
+mat.pca.soil = d.niche %>%
+  select(species, var.soil)
+mat.pca.soil[is.na(mat.pca.soil)] = 0
+pca.soil = dudi.pca (mat.pca.soil[,-1], 
+                    scannf = F, nf = 2)
+s.corcircle(pca.soil$co)
+
+# Save the plot
+pdf(file = here::here("outputs", "figures", "corcircle.soil.pdf")) # open
+s.corcircle(pca.soil$co) # the plot
+dev.off() # close
+```
+Regarding soil variables
+- Organic Matter represents p, n, and cond >> keep OM
+- Arena/arcilla are anti-correlated >> keep arena (ecologicaly relevant)
+- pH must be correlated to mo ! delete
+- keep cn
+- check for mg, ca, k
 
 
 
+### b. Corplot
+```{r}
+# build a function to calculate the significance of correlations
+# mat : matrice de donnée
+# ... : Arguments supplémentaire à passer à la fonction cor.test
+cor.mtest <- function(mat, ...) {
+    mat <- as.matrix(mat)
+    n <- ncol(mat)
+    p.mat<- matrix(NA, n, n)
+    diag(p.mat) <- 0
+    for (i in 1:(n - 1)) {
+        for (j in (i + 1):n) {
+            tmp <- cor.test(mat[, i], mat[, j], ...)
+            p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+        }
+    }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+```
+
+```{r corplot hab}
+# matrix
+mat.pca.hab = d.niche %>%
+  select(species, var.hab)
+mat.pca.hab[is.na(mat.pca.hab)] = 0
+
+# Build a matrix of p-value correlation
+p.mat = cor.mtest(mat.pca.hab[,-1])
+
+# Draw a corplot for habitat variables
+col = colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+M=cor(mat.pca.hab[,-1]) # build a correlation matrix
+corrplot(M, method="color", col=col(200),  
+         type="upper", order="hclust", 
+         addCoef.col = "black", # Ajout du coefficient de corrélation
+         tl.col="black", tl.srt=45, #Rotation des etiquettes de textes
+         # Combiner avec le niveau de significativité
+         p.mat = p.mat, sig.level = 0.01, insig = "blank", 
+         # Cacher les coefficients de corrélation sur la diagonale
+         diag=FALSE)
+```
+
+This brings some additionnal infos : 
+- keep shrub, tree, tot herbs
+- check for mineral and bare soil
+
+
+```{r corplot soil}
+# matrix
+mat.pca.soil = d.niche %>%
+  select(species, var.soil)
+mat.pca.soil[is.na(mat.pca.soil)] = 0
+
+# Build a matrix of p-value correlation
+p.mat = cor.mtest(mat.pca.soil[,-1])
+
+# Draw a corplot for habitat variables
+col = colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+M=cor(mat.pca.soil[,-1]) # build a correlation matrix
+corrplot(M, method="color", col=col(200),  
+         type="upper", order="hclust", 
+         addCoef.col = "black", # Ajout du coefficient de corrélation
+         tl.col="black", tl.srt=45, #Rotation des etiquettes de textes
+         # Combiner avec le niveau de significativité
+         p.mat = p.mat, sig.level = 0.01, insig = "blank", 
+         # Cacher les coefficients de corrélation sur la diagonale
+         diag=FALSE)
+```
+Regarding soil variables
+- Organic Matter represents p, n, and cond >> keep OM
+- Arena/arcilla are anti-correlated >> keep arena (ecologicaly relevant)
+- pH must be correlated to mo ! delete
+- keep cn
+- check for mg, ca, k
+
+### c. Variance Inflation Factor (VIF)
+```{r}
+# habitat
+# var.hab : annual_herbs, perennial_herbs, tot_herbs, small_shrbs, tall_shrbs, trees, bare_soil, mineral  
+collinearity( ~ tot_herbs+small_shrbs+trees+bare_soil, data = mat.pca.hab)
+```
+
+```{r}
+# soil
+# var.hab : ca, mg, k, cond, p, mo, n, ph, cn, arcilla, arena, limo
+
+collinearity( ~ ca+mg+k+cond+p+mo+n+ph+cn+arena, data = mat.pca.soil)
 ```
 
 
-#######
-# II. Broad habitat and soil
-#######
+### d. Conclusion and variable selection
+For habitat, we conserve X variables : 
+- total herbs
+-
 
-###
-# 1. Trait by trait analysis
-###
+For soil, we conserva X variables : 
+- arena
+-
 
-var = var.soil
-data.linum = data.linum.soil
+This leads to X variables overal.
 
-for (i in var){
-  
-  # définit la zone d'impression
-  pdf(file = paste("graph_",i,".pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
-  zones = matrix(c(1,1,2,3,4,5,6,6),ncol=2,nrow=4,byrow=TRUE) # définir la fenetre graphique
-  layout(zones,widths=c(1,1),heights=c(2,2,2,2)) # définir la hauteur et la largeur des cases
-  par(mar = c(4,4,1,4)) # marges
-  
-  # graphique n°1 : historgramme global des valeurs
-  hist(data.linum[which(data.linum$species=="Linum suffruticosum"),i],col="brown1",main=i,xlab="Value",breaks=10) # histogramme en 10 barres
-  hist(data.linum[which(data.linum$species=="Linum tenuifolium"),i],col="cornflowerblue",main=i,add=T,breaks=10) # idem
-  mean.suf=mean(na.omit(data.linum[which(data.linum$species=="Linum suffruticosum"),i])) # enlève les NA
-  mean.ten=mean(na.omit(data.linum[which(data.linum$species=="Linum tenuifolium"),i])) # idem
-  abline(v=mean.suf, col="red") # représente la moyenne comme une barre verticale
-  abline(v=mean.ten, col="blue")
-  
-  # graphique n°2 : barplot des moyennes par espèce
-  moy.par.sp=aggregate(data.linum[,i]~data.linum$species,FUN=function (x) (mean(x)))  # moyenne par espèce
-  erstd.par.sp=aggregate(data.linum[,i]~data.linum$species,FUN=function(x) (sd(x))/(length(x))^(1/2))  # erreur standard
-  barplot.sp=barplot(moy.par.sp[,2], main=i,  ylab="Value",ylim=c(0,(max(moy.par.sp[,2]))*1.3),axes=T)
-  error.bar(barplot.sp,moy.par.sp[,2],erstd.par.sp[,2])
-  mtext(c("L. suf","L. tenui"),side=1,line=0.5,adj=c(0.2,0.8))
-  
-  # graphique n°3 : boxplot des espèces
-  boxplot(data.linum[,i]~data.linum$species,main=i) # dessine un boxplot, info proche n°2
-  
-  # graphique n°4 : barplot des moyennes par espèce par status (mixed VS pure)
-  moy.par.sp.st=aggregate(data.linum[,i]~data.linum$species*data.linum$status,FUN=function (x) (mean(x)))  # moyenne croisée espèce*status
-  moy.par.sp.st=moy.par.sp.st[c(3,1,4,2),] # réarrange l'ordre pour avoir les barres dans le bon ordre
-  erstd.par.sp.st=aggregate(data.linum[,i]~data.linum$species*data.linum$status,FUN=function(x) (sd(x))/(length(x))^(1/2))  
-  erstd.par.sp.st=erstd.par.sp.st[c(3,1,4,2),] # idem pour erreur standard
-  barplot.sp=barplot(moy.par.sp.st[,3], main=i,  ylab="Value",ylim=c(0,(max(moy.par.sp.st[,3]))*1.3),axes=T,space=c(0,0.1,1,0.1))
-  error.bar(barplot.sp,moy.par.sp.st[,3],erstd.par.sp.st[,3])
-  mtext(c("Pure","Mixed","Pure","Mixed"),side=1,line=0.5,adj=c(0.1,0.3,0.7,0.9))
-  mtext(c("L. suffruticosum","L. tenuifolium"),side=1,line=2,adj=c(0.15,0.87))
-  
-  # graphique n°5 : comparaison des populations mixtes
-  suf.mix = merge (data.linum[which(data.linum$status=="mixed" & data.linum$species=="Linum suffruticosum"),], 
-                   tab.mixed.duo,
-                   by.x = "row.names", by.y = "Linum suffruticosum",
-                   all = F)
-  suf.mix = suf.mix [order(suf.mix[,"order"]),]
-  
-  ten.mix = merge (data.linum[which(data.linum$status=="mixed" & data.linum$species=="Linum tenuifolium"),], 
-                   tab.mixed.duo,
-                   by.x = "row.names", by.y = "Linum tenuifolium",
-                   all = F)
-  ten.mix = ten.mix [order(ten.mix[,"order"]),]
-  suf.mix
-  plot(suf.mix[,i], ten.mix[,i],
-       xlim=c(min(c(suf.mix[,i], ten.mix[,i])*0.95), max(c(suf.mix[,i], ten.mix[,i]))*1.05),
-       ylim=c(min(c(suf.mix[,i], ten.mix[,i]))*0.95,max(c(suf.mix[,i], ten.mix[,i]))*1.05),
-       ylab="Linum tenuifolium",xlab="Linum suffruticosum",main="Mixed populations",
-       cex=1,pch=20)
-  abline(a=0,b=1) #bissectrice
-  
-  
-  ### Stats
-  matrice.stat=data.linum[,c("species",i)]
-  matrice.stat=na.omit(matrice.stat)
-  
-  # Normalité des distribution (# teste la normalité de la distribution de chaque jeu de données)
-  shpt.suf=shapiro.test(matrice.stat[which(matrice.stat$species=="Linum suffruticosum"),i]) 
-  shpt.ten=shapiro.test(matrice.stat[which(matrice.stat$species=="Linum tenuifolium"),i])
-  
-  # Test d'homogénéité des variances
-  hom.var=var.test(matrice.stat[,i]~matrice.stat$species)
-
-  # Test t (alternative = two.sided)
-  ttest=t.test(matrice.stat[,i]~matrice.stat$species,alternative="two.sided")
-
-  # Test de Wilcoxon pour données non-normales [alternative two.sided]
-  wilc=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="two.sided")
-  
-  # Test de Wilcoxon pour données non-normales [alternative greater]
-  wilc.g=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="greater")
-  
-  # Test de Wilcoxon pour données non-normales [alternative less]
-  wilc.l=wilcox.test(matrice.stat[,i]~matrice.stat$species,alternative="less")
-  
-  # Test apparié (sur jeu de données réduit)
-  paired.wilc=wilcox.test(suf.mix[,i], ten.mix[,i], paired=T) # prendre test non apparié
-
-  # Affiche les résultats dans la dernière fenêtre
-  plot.new() # crée une fenêtre de plot vide où ecrire les résultats pour les avoir dans le plot
-  
-  text(0,0.95,paste("Normality L. suffruticosum, p = ",round(shpt.suf$p.value,4)),cex=1.6,adj = c(0, NA))
-  text(0.55,0.95,paste("Normality L. tenuifolium, p = ",round(shpt.ten$p.value,4)),cex=1.6,,adj = c(0, NA))
-  
-  text(0,0.7,"Homogeneity of variance",cex=1.6,adj = c(0, NA))
-  text(0.05,0.6,paste("Statistic =", round(hom.var$statistic,3),"p.value = ",round(hom.var$p.value,3)),cex=1.6,adj = c(0, NA))
-       
-  text(0.55,0.7,"Student t test",cex=1.6,adj = c(0, NA))
-  text(0.6,0.6,paste("Statistic =", round(ttest$statistic,3),"p.value = ",round(ttest$p.value,3)),cex=1.6,adj = c(0, NA))
-  
-  text(0,0.4,"Wilcoxon test two.sided",cex=1.6,adj = c(0, NA))
-  text(0.05,0.3,paste("Statistic =", round(paired.wilc$statistic,3),"p.value = ",round(wilc$p.value,3)),cex=1.6,adj = c(0, NA))
-  
-  text(0.55,0.4,"Non parametric paired test",cex=1.6,adj = c(0, NA))
-  text(0.6,0.3,paste("Statistic =", round(hom.var$statistic,3),"p.value = ",round(hom.var$p.value,3)),cex=1.6,adj = c(0, NA))
-
-  text(0,0.1,"Wilcoxon test greater",cex=1.6,adj = c(0, NA))
-  text(0.05,0,paste("Statistic =", round(wilc.g$statistic,3),"p.value = ",round(wilc.g$p.value,3)),cex=1.6,adj = c(0, NA))
-  
-  text(0.55,0.1,"Wilcoxon test less",cex=1.6,adj = c(0, NA))
-  text(0.6,0,paste("Statistic =", round(wilc.l$statistic,3),"p.value = ",round(wilc.l$p.value,3)),cex=1.6,adj = c(0, NA))
-  
-       par(mfrow=c(1,1)) # ferme la fenetre
-       dev.off() #arrête PDF     
-}
-
-
-###
-# 2. Multivariate approach PCA
-###
+## Principal Component Analysis
+```{r}
 var = var.soil # adapte le code à la var
 data.linum = data.linum.soil # adapte le code a la var
 
@@ -222,7 +568,9 @@ s.class(pca.linum$li,fac=as.factor(matrice.pca$species),clabel=0.9,grid=F)
 
 par(mfrow=c(1,1)) # ferme la fenetre
 dev.off() #arrête PDF
+```
 
+```{r}
 ###
 # 3. Test differences : is there a difference between groups?
 ###
@@ -244,12 +592,13 @@ adonis2(data.linum[,var] ~ species, data = data.linum,
 # 3b. MRPP [multi response permutation procedure]
 linum.mrpp = with(data.linum, mrpp(data.linum[,var], species)) # euclidean dissimilarity index
 linum.mrpp
+```
 
 
-###
-# 4. Analyse discriminante 
-###
 
+## Analyse discriminante 
+
+```{r}
 ### A. Linéaire (LDA)
 
 # packages
@@ -362,7 +711,7 @@ mantel(lsuf.dist, lten.dist)
 mantel(veg.dist, env.dist, method="spear")
 
 
-
+```
 
 
 

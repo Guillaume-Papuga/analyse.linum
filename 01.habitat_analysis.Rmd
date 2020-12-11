@@ -18,6 +18,10 @@ library(reshape2)
 library(ggpubr)
 library(statisticalModeling)
 library(corrplot)
+library(vegan)
+library(adegraphics)
+library(MASS)
+library(klaR)
 ```
 
 ```{r data loading}
@@ -406,8 +410,6 @@ Regarding soil variables
 - keep cn
 - check for mg, ca, k
 
-
-
 ### b. Corplot
 ```{r}
 # build a function to calculate the significance of correlations
@@ -449,6 +451,18 @@ corrplot(M, method="color", col=col(200),
          p.mat = p.mat, sig.level = 0.01, insig = "blank", 
          # Cacher les coefficients de corrélation sur la diagonale
          diag=FALSE)
+
+# Save the plot
+pdf(file = here::here("outputs", "figures", "corplot.hab.pdf")) # open
+corrplot(M, method="color", col=col(200),  
+         type="upper", order="hclust", 
+         addCoef.col = "black", # Ajout du coefficient de corrélation
+         tl.col="black", tl.srt=45, #Rotation des etiquettes de textes
+         # Combiner avec le niveau de significativité
+         p.mat = p.mat, sig.level = 0.01, insig = "blank", 
+         # Cacher les coefficients de corrélation sur la diagonale
+         diag=FALSE)# the plot
+dev.off() # close
 ```
 
 This brings some additionnal infos : 
@@ -476,6 +490,18 @@ corrplot(M, method="color", col=col(200),
          p.mat = p.mat, sig.level = 0.01, insig = "blank", 
          # Cacher les coefficients de corrélation sur la diagonale
          diag=FALSE)
+
+# Save the plot
+pdf(file = here::here("outputs", "figures", "corplot.soil.pdf")) # open
+corrplot(M, method="color", col=col(200),  
+         type="upper", order="hclust", 
+         addCoef.col = "black", # Ajout du coefficient de corrélation
+         tl.col="black", tl.srt=45, #Rotation des etiquettes de textes
+         # Combiner avec le niveau de significativité
+         p.mat = p.mat, sig.level = 0.01, insig = "blank", 
+         # Cacher les coefficients de corrélation sur la diagonale
+         diag=FALSE)
+dev.off() # close
 ```
 Regarding soil variables
 - Organic Matter represents p, n, and cond >> keep OM
@@ -487,173 +513,199 @@ Regarding soil variables
 ### c. Variance Inflation Factor (VIF)
 ```{r}
 # habitat
-# var.hab : annual_herbs, perennial_herbs, tot_herbs, small_shrbs, tall_shrbs, trees, bare_soil, mineral  
-collinearity( ~ tot_herbs+small_shrbs+trees+bare_soil, data = mat.pca.hab)
+# var.hab : annual_herbs, perennial_herbs, tot_herbs, shrub, small_shrbs, tall_shrbs, trees, bare_soil, mineral  
+vif.hab = as.tibble(collinearity( ~ tot_herbs+shrub+trees+bare_soil+mineral, data = mat.pca.hab))
+vif.hab
+
+# Save the table
+write.csv( vif.hab, here::here("outputs", "tables", "vif.hab.csv"))
 ```
 
 ```{r}
 # soil
 # var.hab : ca, mg, k, cond, p, mo, n, ph, cn, arcilla, arena, limo
 
-collinearity( ~ ca+mg+k+cond+p+mo+n+ph+cn+arena, data = mat.pca.soil)
+vif.soil = collinearity( ~ mg+cond+mo+cn+arena, data = mat.pca.soil)
+vif.soil
+
+# Save the table
+write.csv( vif.soil, here::here("outputs", "tables", "vif.soil.csv"))
 ```
 
 
 ### d. Conclusion and variable selection
-For habitat, we conserve X variables : 
+For habitat, we conserve 5 variables : 
 - total herbs
--
+- shrub
+- bare soil
+- tree
+- mineral
 
-For soil, we conserva X variables : 
+For soil, we conserva 6 variables : 
+- mg
+- cond
+- mo
+- cn
 - arena
--
 
-This leads to X variables overal.
+This leads to 10 variables overal, which leads to a ~1/10 ratio for 107 individuals
 
-## Principal Component Analysis
+## Unconstrained multivariate analysis (Principal Component Analysis + Permanova)
 ```{r}
-var = var.soil # adapte le code à la var
-data.linum = data.linum.soil # adapte le code a la var
+# 1. Define the table
+var = c("mg", "cond", "mo", "cn", "arena", "tot_herbs", "shrub", "trees", "bare_soil", "mineral") # adapte le code aux var
+data.linum = d.niche %>%
+  select(c(species, var))
 
-# 2a. Pairs table to investigate multi-collinearity
-# first, créer la fonction panel.cor dans l'aide de pairs
-mat.pairs = na.omit(data.linum[,c("species", var)]) # avec var.bhab pour le deuxième
-pairs(mat.pairs, lower.panel = panel.smooth, upper.panel = panel.cor,pch=16,cex=1)
+# 2. PCA 
+pca.linum = dudi.pca(data.linum[,var], scannf = FALSE, nf = 2)
+s.class(pca.linum$li, 
+        fac=data.linum$species,
+        grid = F)
 
-# 2b. PCA 
-matrice.pca = data.linum[,c("species",var)]  # choisi var.soil ou var.bhab
-matrice.pca = na.omit(matrice.pca)
-pca.linum = dudi.pca(matrice.pca[,var], scannf = FALSE, nf = 2)
+# 3. Save the plot
+pdf(file = here::here("outputs", "figures", "pca.global.pdf")) # open
+s.class(pca.linum$li, fac=data.linum$species, grid = F)
+dev.off() # close
 
-# définit la zone d'impression
-pdf(file = paste("PCA_bhab.pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
-zones = matrix(c(1,2,3),ncol=1,nrow=3,byrow=TRUE) # définir la fenetre graphique
-layout(zones,widths=c(1),heights=c(1,1,1)) # définir la hauteur et la largeur des cases
-par(mar = c(4,4,1,4)) # marges
+pdf(file = here::here("outputs", "figures", "pca.cor.global.pdf")) # open
+s.corcircle(pca.linum$co, grid = F)
+dev.off() # close
 
-# les trois graphs
-s.corcircle(pca.linum$co,clabel=0.9,grid=F,box=F)
-s.label(pca.linum$li,clabel=0.9,grid=F,box=F)
-w.ax1=round((pca.linum$eig[1]/sum(pca.linum$eig))*100,1)
-text(3,1.5,paste("Axe 1 : ",w.ax1),adj=0)
-w.ax2=round((pca.linum$eig[2]/sum(pca.linum$eig))*100,1)
-text(3,2,paste("Axe 2 : ",w.ax2),adj=0)
-s.class(pca.linum$li,fac=as.factor(matrice.pca$species),clabel=0.9,grid=F)
+# 4. Statistical test
+## Permanova using the function adonis2 from the package vegan
+perm.linum = adonis2(data.linum[,var] ~ data.linum$species, 
+                     by = NULL, 
+                     method = "bray")
+perm.linum
 
-par(mfrow=c(1,1)) # ferme la fenetre
-dev.off() #arrête PDF 
-
-
-# 2c. with only "non correlated variables" variables > UNIQUEMENT POUR SOIL! Pas de correlation chez Bhab
-var.red = c("mg", "k", "cond", "mo" , "ph", "cn", "arcilla",  "limo") # selectionne pour soil
-# enlevé : "n", "p" (MO), "ca" (K), "arena" (Arcilla)
-matrice.pca = data.linum[,c("species", var.red)]
-matrice.pca = na.omit(matrice.pca)
-pca.linum = dudi.pca(matrice.pca[,var.red], scannf = FALSE, nf = 2)
-
-# définit la zone d'impression
-pdf(file = paste("PCA_soil.red.comp",".pdf",sep=""),width=8, height=10) # lancer l'impression automatique en pdf
-zones=matrix(c(1,2,3),ncol=1,nrow=3,byrow=TRUE) # définir la fenetre graphique
-layout(zones,widths=c(1),heights=c(1,1,1)) # définir la hauteur et la largeur des cases
-par(mar = c(4,4,1,4)) # marges
-
-# les trois graphs
-s.corcircle(pca.linum$co,clabel=0.9,grid=F,box=F)
-s.label(pca.linum$li,clabel=0.9,grid=F,box=F)
-w.ax1=round((pca.linum$eig[1]/sum(pca.linum$eig))*100,1)
-text(5,1.5,paste("Axe 1 : ",w.ax1))
-w.ax2=round((pca.linum$eig[2]/sum(pca.linum$eig))*100,1)
-text(5,2,paste("Axe 2 : ",w.ax2))
-s.class(pca.linum$li,fac=as.factor(matrice.pca$species),clabel=0.9,grid=F)
-
-par(mfrow=c(1,1)) # ferme la fenetre
-dev.off() #arrête PDF
+# Save the table
+write.csv( perm.linum, here::here("outputs", "tables", "perm.linum.csv"))
 ```
-
-```{r}
-###
-# 3. Test differences : is there a difference between groups?
-###
-library (vegan)
-var = var.bhab # adapte le code à la var
-data.linum = data.linum.bhab # adapte le code a la var
-
-# 3a. NP MANOVA [permutational non parametric ANOVA] : Adonis2 (more robust in most case)
-adonis2(data.linum[,var] ~ species, data = data.linum, 
-        permutations = 999, method = "Bray")
-
-adonis2(data.linum[,var] ~ species, data = data.linum, 
-        permutations = 999, method = "euclidean")
-
-adonis2(data.linum[,var] ~ species, data = data.linum, 
-        permutations = 999, method = "mahalanobis")
-
-
-# 3b. MRPP [multi response permutation procedure]
-linum.mrpp = with(data.linum, mrpp(data.linum[,var], species)) # euclidean dissimilarity index
-linum.mrpp
-```
-
+There is no difference between environment for the two species, as the part of the variance explained by the species factor is ~1%.
 
 
 ## Analyse discriminante 
-
+### A. Preliminary analysis
 ```{r}
-### A. Linéaire (LDA)
+# 1. Define the table
+var = c("mg", "cond", "mo", "cn", "arena", "tot_herbs", "shrub", "trees", "bare_soil", "mineral") # adapte le code aux var
+var.hab.select = c("tot_herbs", "shrub", "trees", "bare_soil", "mineral")
+var.soil.select = c("mg", "cond", "mo", "cn", "arena")
+data.linum = d.niche %>%
+  select(c(species, var))
 
-# packages
-library(adegraphics)
-library(MASS)
+# 2. Homogeneity of Covariance Matrices Test with covTestR
+homogeneityCovariances(data.linum, group = species, covTest = BoxesM)
+homogeneityCovariances(data.linum, group = species, covTest = Ahmad2017)
+homogeneityCovariances(data.linum, group = species, covTest = Chaipitak2013)
+homogeneityCovariances(data.linum, group = species, covTest = Ishii2016)
+homogeneityCovariances(data.linum, group = species, covTest = Schott2001)
+homogeneityCovariances(data.linum, group = species, covTest = Schott2007)
+homogeneityCovariances(data.linum, group = species, covTest = Srivastava2007)
+homogeneityCovariances(data.linum, group = species, covTest = Srivastava2014)
+homogeneityCovariances(data.linum, group = species, covTest = SrivastavaYanagihara2010)
 
-# data
-data.linum = data.linum.bhab
-var = var.bhab
-
-# crée la matrice
-matrice.lda = data.linum[,var]
-factor.da = data.linum[,"species"]
-matrice.lda = na.omit(matrice.lda)
-
-# testing the normality of variance-covariance matrix
-library (MVN)
-suf = data.linum[which(data.linum$species == "Linum suffruticosum"), var] # suffruticosum
-ten = data.linum[which(data.linum$species == "Linum tenuifolium"), var] # tenuifolium
-
-res.mardia.suf = mvn(data = suf, mvnTest = "mardia")
-result$multivariateNormality
-
-result = mvn(data = data.linum[,c("species",var)], subset = "species", mvnTest = "mardia",
-             univariateTest = "AD", univariatePlot = "histogram",
-             multivariatePlot = "qq", multivariateOutlierMethod = "adj",
-             showOutliers = TRUE, showNewData = TRUE)
-result$multivariateNormality
-
-# testing the homogeneity of variance-covariance matrix
+# 3. Homogeneity of Covariance Matrices Test with heplots
 library (heplots)
-res <- boxM(matrice.lda, factor.da)
+# create the matrix
+matrice.da = data.linum[,var]
+factor.da = data.linum[,"species"]
 
-dets <- res$logDet
-ng <- length(res$logDet)-1
-points(dets , 1:3,  
-       cex=c(rep(1.5, ng), 2.5), 
-       pch=c(rep(16, ng), 15),
-       col= c(rep("blue", ng), "red"))
+res <- boxM(matrice.da, factor.da)
+summary(res)
+```
 
-# selectionne les variables sur la base de la PCA d'avant
-linum.lda = lda(factor.da~., data = matrice.lda, prior = c(1, 1)/2, CV = TRUE)
+### A. Linéaire (LDA)
+```{r}
+# 1. Fit the LDA model
+# fit the full model
+linum.lda = lda(factor.da~., data = matrice.da)
 
-# Assess the accuracy of the prediction
-# percent correct for each category of G
-ct <- table(factor.da, linum.lda$class) # contingency table
+# plot 1
+plot (linum.lda) # show the plot
+# save the plot
+pdf(file = here::here("outputs", "figures", "lda.pdf")) # open
+plot (linum.lda)
+dev.off() # close
 
-diag(prop.table(ct, 1)) # proportion on the contingency table (diag prend juste la diag = les justes)
-sum(diag(prop.table(ct))) # total des prédictions justes
+# plot 2
+# habitat
+partimat(factor.da~., data = matrice.da[, var.soil.select], method="lda") 
+# soil
+partimat(factor.da~., data = matrice.da[, var.soil.select], method="lda") 
+
+# plot 3. pairs
+# hab
+pairs(matrice.da[,var.hab.select], main = "Pair plots", pch=22,
+      bg=c("red", "blue")[unclass(factor.da)]) 
+
+# soil
+pairs(matrice.da[,var.soil.select], main = "Pair plots", pch=22,
+      bg=c("red", "blue")[unclass(factor.da)]) 
 
 
-### B. Quadratic (discriminant function does not assume homogeneity of variance-covariance matrices)
+# 2. Assess the accuracy of the model
+# 2.a. Jacknife (= leave one out) procedure
+linum.lda = lda(factor.da~., data = matrice.da, prior = c(1, 1)/2, CV = TRUE) # use JK in lda function
 
-linum.qda = qda(factor.da~., data = matrice.lda, prior = c(1, 1)/2, CV = TRUE)
-plot (linum.qda)
+ct <- table(factor.da, predict(linum.lda)$class) # create the contingency table
+prop.table(ct)
+diag(prop.table(ct, 1)) 
+sum(diag(prop.table(ct)))
+
+# 2.b. Cross validation approach
+# Create the table to store values
+mat.lda = matrix(data = NA, ncol = 3, nrow = 10000)
+colnames (mat.lda) = c("success.suf", "success.ten", "class.success")
+
+# Start the loop
+for (i in 1:nrow(mat.lda)) {
+  # Split the dataset into train and test
+  n.obs.train = round (0.6 * nrow(data.linum), 0)
+  
+  # suf
+  data.suf = data.linum[which(data.linum$species=="Linum suffruticosum"),]
+  row.train.suf = sample(seq_along(data.suf$species), n.obs.train/2)
+  train.suf = data.suf[row.train.suf,]
+  test.suf = data.suf[-row.train.suf,]
+
+  # ten
+  data.ten = data.linum[which(data.linum$species=="Linum tenuifolium"),]
+  row.train.ten = sample(seq_along(data.ten$species), n.obs.train/2)
+  train.ten = data.ten[row.train.ten,]
+  test.ten = data.ten[-row.train.ten,]
+
+  # assemble
+  train = rbind (train.suf, train.ten)
+  test = rbind (test.suf, test.ten)
+  
+  # Fit a LDA model on the train dataset
+  linum.lda = lda(species~., data = train)
+  
+  # Assess the accuracy of the prediction
+  ct = table(test$species, predict(linum.lda, newdata = test)$class) # create the contingency table
+  success.suf = as.vector(diag(prop.table(ct, 1)) [1])
+  success.ten = as.vector(diag(prop.table(ct, 1)) [2])
+  class.success = sum(diag(prop.table(ct)))
+  
+  # Write the result
+  mat.lda[i, "success.suf"] = success.suf
+  mat.lda[i, "success.ten"] = success.ten
+  mat.lda[i, "class.success"] = class.success
+}
+
+# Draw the 3 histograms
+mat.lda = data.frame(mat.lda)
+hist (mat.lda$class.success)
+mean (mat.lda$class.success)
+```
+
+### B. Quadratic 
+This discriminant function does not assume homogeneity of variance-covariance matrices.
+```{r}
+# 1. Fit the model
+linum.qda = qda(factor.da~., data = matrice.da, prior = c(1, 1)/2, CV = TRUE)
 
 # Assess the accuracy of the prediction
 # percent correct for each category of G
@@ -661,28 +713,34 @@ ct <- table(factor.da, linum.qda$class) # contingency table
 
 diag(prop.table(ct, 1)) # proportion on the contingency table (diag prend juste la diag = les justes)
 sum(diag(prop.table(ct))) # total des prédictions justes
+```
 
 ### C. graphs
+```{r}
+# Explore some graphical comparisons
 plot (linum.lda)
 plot (linum.lda, dimen=1, type="both") 
 
 # Exploratory Graph for LDA or QDA
-library(klaR)
-part.plot = partimat(factor.da~., data = matrice.lda, method="lda") 
+
+pdf(file = here::here("outputs", "figures", "partimat.lda.pdf")) # open
+dev.off() # close
 
 # graph pairs
-pairs(matrice.lda, main = "Pair plots", pch=22,
+# hab
+pairs(matrice.da[,var.hab.select], main = "Pair plots", pch=22,
       bg=c("red", "blue")[unclass(factor.da)]) 
 
-###
-# 5. PLS DA
-###
+# soil
+pairs(matrice.da[,var.soil.select], main = "Pair plots", pch=22,
+      bg=c("red", "blue")[unclass(factor.da)]) 
 
-
+```
 
 ###
 # 6. Structure spatiale
 ###
+```{r}
 ################################## Vieux code à reprendre ###########################@
 # 2d. Structure spatiale des données
 mat.spa.str=merge(data.linum,pca.linum$li,by="row.names",all=T)
